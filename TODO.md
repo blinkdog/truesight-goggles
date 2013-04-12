@@ -1,8 +1,11 @@
 # TODO
 
-* Import functionality of paizo_link_underline.user.js
-* Add functionality to remove/disable paizo_link_underline.user.js
-* Rework truesight goggles dialog to allow toggle of link underline
+* Add function to center dialog at current scroll when owl is clicked
+* Import functionality of paizo_embed_image
+** Add suggestion to automatically linkify URL-looking things
+* Import functionality of paizo_gargamel
+* Import functionality of paizo_autolink
+* Import functionality of paizo_ignore
 * .. and more!
 
 # Reference

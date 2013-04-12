@@ -18,7 +18,7 @@
 //---------------------------------------------------------------------------
 // ==UserScript==
 // @name            truesight-goggles
-// @version         0.3
+// @version         0.4
 // @updateURL       https://github.com/blinkdog/truesight-goggles/raw/master/src/main/webapp/js/truesight-goggles.user.js
 // @namespace       http://pages.cs.wisc.edu/~meade/greasemonkey/
 // @description     Enhance your experience on Paizo's website
@@ -108,6 +108,13 @@ var reposition = function() {
     });
 }
 
+var linkUnderlineStyles = [
+    "a:link { text-decoration: underline !important; }",
+    "a:visited { text-decoration: underline !important; }",
+    "a:active { text-decoration: underline !important; }",
+    "a:hover { text-decoration: underline !important; }"
+];
+
 //---------------------------------------------------------------------------
 // Lights, Camera, Action!
 //---------------------------------------------------------------------------
@@ -116,18 +123,31 @@ $(document).ready(function() {
     loadjQueryUi();
     // give the owl some style
     GM_addStyle([
-        "#truesight-goggles { display:inline-block; opacity:0.5; }",
-        "#truesight-goggles:hover { display:inline-block; opacity:1.0; }",
+        "#truesight-goggles { opacity:0.5; }",
+        "#truesight-goggles:hover { opacity:1.0; }",
         "#truesight-goggles-dialog { display:none; }",
     ].join(""));
     // create the owl
     $('body').append([
-        '<div id="truesight-goggles">',
-            '<img id="truesight-goggles-img" src="http://paizo.com/image/avatar/owl.jpg"/>',
+'<div id="truesight-goggles">',
+    '<img id="truesight-goggles-img" src="http://paizo.com/image/avatar/owl.jpg"/>',
+'</div>',
+'<div id="truesight-goggles-dialog" title="another_mage\'s Truesight Goggles">',
+    '<div id="truesight-goggles-tabs">',
+        '<ul>',
+            '<li><a href="#tab-css">CSS</a></li>',
+            '<li><a href="#tab-about">About</a></li>',
+        '</ul>',
+        '<div id="tab-css">',
+            '<input id="checkLinkUnderline" type="checkbox"/> Underline All Links',
         '</div>',
-        '<div id="truesight-goggles-dialog" title="another_mage\'s Truesight Goggles">',
-            '<p>All your Pathfinder are belong to us!</p>',
-        '</div>'
+        '<div id="tab-about">',
+            '<p><a href="https://paizo.com/people/another_mage">another_mage</a>\'s Truesight Goggles<br/>License: <a href="http://www.gnu.org/licenses/agpl.html">AGPL v3+</a>&nbsp;Source: <a href="https://github.com/blinkdog/truesight-goggles">GitHub</a></p>',
+            '<p>Thanks to:</p>',
+            '<p><a href="https://paizo.com/people/Cheapy">Cheapy</a></p>',
+        '</div>',
+    '</div>',
+'</div>'
     ].join(""));
     // resize the owl
     $("#truesight-goggles-img").width(
@@ -140,7 +160,23 @@ $(document).ready(function() {
     $(window).resize(reposition);
     // tell the owl to pop up a friendly dialog when clicked
     $("#truesight-goggles-img").click(function() {
+        $("#truesight-goggles-tabs").tabs();
         $("#truesight-goggles-dialog").dialog();
+    });
+    // tell the Underline All Links checkbox how to act
+    $("#checkLinkUnderline").click(function() {
+        var checkbox = $("#checkLinkUnderline")[0];
+        if(checkbox.checked) {
+            linkUnderlineStyles.forEach(function(element, index, array) {
+                GM_addStyle(element);
+            });
+        } else {
+            $("style").each(function(index, element) {
+                if(linkUnderlineStyles.indexOf(element.innerHTML) != -1) {
+                    $(this).remove();
+                }
+            });
+        }
     });
 });
 
