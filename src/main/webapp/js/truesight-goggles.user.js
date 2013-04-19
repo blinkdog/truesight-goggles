@@ -18,7 +18,7 @@
 //---------------------------------------------------------------------------
 // ==UserScript==
 // @name            truesight-goggles
-// @version         0.5
+// @version         0.6
 // @updateURL       https://github.com/blinkdog/truesight-goggles/raw/master/src/main/webapp/js/truesight-goggles.user.js
 // @namespace       http://pages.cs.wisc.edu/~meade/greasemonkey/
 // @description     Enhance your experience on Paizo's website
@@ -68,6 +68,25 @@ var applyConfiguration = function() {
     doProcessPosts();
 }
 
+var buildIgnoreList = function() {
+    // load the ignore list from the configuration
+    tsgConfig.ignoreList = JSON.parse(GM_getValue("ignoreList", '[]'));
+    // assemble an ignore list 
+    var result = new Array();
+    result.push("<ol id='ignore-list'>");
+    var index = 0;
+    for(index=0; index<tsgConfig.ignoreList.length; index++) {
+        result.push([
+            "<li class='ui-widget-content'>",
+            tsgConfig.ignoreList[index],
+            "</li>",
+        ].join(""));
+    }
+    result.push("</ol>");
+    // return the assembled ignore list
+    return result.join("");
+}
+
 var collateAnchorTags = function(splitHtml) {
     var result = new Array();
     var index = 0;
@@ -94,7 +113,7 @@ var doLinkAutolink = function(element) {
     for(index=0; index<element.splitHTML.length; index++) {
         if(isTag(element.splitHTML[index]) === false) {
             element.splitHTML[index] = element.splitHTML[index].replace(
-                /([A-Za-z]+\:\/\/[^<]+)/gm,
+                /([A-Za-z]+\:\/\/[^\s]+)/gm,
                 '<a href="$1" target="_blank">$1</a>');
         }
     }
@@ -116,8 +135,9 @@ var doLinkUnderline = function(underline) {
 
 var doProcessPosts = function() {
     $(".post itemscope").each(function(index, element) {
-        if(false) {
+        if(tsgConfig.cullIgnored && isIgnored(element)) {
             // remove the post instead of working with it
+            $(this).remove();
         }
         else {
             // reload the original text of the post
@@ -136,8 +156,21 @@ var doProcessPosts = function() {
     });
 }
 
+var findAuthor = function(element) {
+    var title = $(".nameHeader a", element).attr("title");
+    if(title.indexOf("Alias of") != -1) {
+        title = title.substring(8);
+    }
+    return title;
+}
+
 var isAnchor = function(text) {
     return (text[1] === 'a' || text[1] === 'A');
+}
+
+var isIgnored = function(element) {
+    var author = findAuthor(element);
+    return (tsgConfig.ignoreList.indexOf(author) != -1);
 }
 
 var isTag = function(text) {
@@ -146,11 +179,13 @@ var isTag = function(text) {
 
 var loadConfiguration = function() {
     // load the configuration from storage
-    tsgConfig.checkLinkAutolink = (GM_getValue("checkLinkAutolink", "false") === "true");
+    tsgConfig.checkLinkAutolink = (GM_getValue("checkLinkAutolink", "true") === "true");
     tsgConfig.checkLinkUnderline = (GM_getValue("checkLinkUnderline", "false") === "true");
+    tsgConfig.cullIgnored = (GM_getValue("cullIgnored", "true") === "true");
     // update the dialog box
     $("#checkLinkAutolink")[0].checked = tsgConfig.checkLinkAutolink;
     $("#checkLinkUnderline")[0].checked = tsgConfig.checkLinkUnderline;
+    $("#cullIgnored")[0].checked = tsgConfig.cullIgnored;
 }
 
 var loadPostText = function() {
@@ -220,6 +255,8 @@ var reposition = function() {
 var saveConfiguration = function() {
     GM_setValue("checkLinkAutolink", tsgConfig.checkLinkAutolink);
     GM_setValue("checkLinkUnderline", tsgConfig.checkLinkUnderline);
+    GM_setValue("cullIgnored", tsgConfig.cullIgnored);
+    GM_setValue("ignoreList", JSON.stringify(tsgConfig.ignoreList));
 }
 
 var savePostText = function() {
@@ -274,11 +311,17 @@ $(document).ready(function() {
     '<div id="truesight-goggles-tabs">',
         '<ul>',
             '<li><a href="#tab-display">Display</a></li>',
+            '<li><a href="#tab-ignore">Ignore</a></li>',
             '<li><a href="#tab-posts">Posts</a></li>',
             '<li><a href="#tab-about">About</a></li>',
         '</ul>',
         '<div id="tab-display">',
             '<input id="checkLinkUnderline" type="checkbox"/> Underline All Links<br/>',
+        '</div>',
+        '<div id="tab-ignore">',
+            '<input id="cullIgnored" type="checkbox"/> Remove Posts by Ignored<br/>',
+            buildIgnoreList(),
+            '<button>Remove</button>',
         '</div>',
         '<div id="tab-posts">',
             '<input id="checkLinkAutolink" type="checkbox"/> Hyperlink URLs<br/>',
@@ -303,7 +346,10 @@ $(document).ready(function() {
     // tell the owl to pop up a friendly dialog when clicked
     $("#truesight-goggles-img").click(function() {
         $("#truesight-goggles-tabs").tabs();
-        $("#truesight-goggles-dialog").dialog();
+        $("#truesight-goggles-dialog").dialog({
+            minHeight: 300, minWidth: 360,
+            position: { my: "center", at: "center", of: window }
+	});
     });
     // tell the Hyperlink URLs checkbox how to act
     $("#checkLinkAutolink").click(function() {
@@ -317,9 +363,19 @@ $(document).ready(function() {
         saveConfiguration();
         doLinkUnderline(tsgConfig.checkLinkUnderline);
     });
+    // tell the Remove Posts by Ignored checkbox how to act
+    $("#cullIgnored").click(function() {
+        tsgConfig.cullIgnored = $("#cullIgnored")[0].checked;
+        saveConfiguration();
+        if(tsgConfig.cullIgnored) {
+            doProcessPosts();
+        } else {
+            location.reload(true);
+        }
+    });
     // save post text, if any
     savePostText();
-    // load and apply the configuration
+    // apply the configuration
     loadConfiguration();
     applyConfiguration();
 });
