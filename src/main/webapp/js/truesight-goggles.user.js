@@ -18,7 +18,7 @@
 //---------------------------------------------------------------------------
 // ==UserScript==
 // @name            truesight-goggles
-// @version         0.7
+// @version         0.8
 // @updateURL       https://github.com/blinkdog/truesight-goggles/raw/master/src/main/webapp/js/truesight-goggles.user.js
 // @namespace       http://pages.cs.wisc.edu/~meade/greasemonkey/
 // @description     Enhance your experience on Paizo's website
@@ -133,6 +133,27 @@ var collateAnchorTags = function(splitHtml) {
     return result;
 }
 
+var convertYouTubeUrl = function(url) {
+    var urlParts = url.split('?');
+    if(urlParts.length >= 2) {
+        var location = urlParts[0];
+        var params = urlParts[1];
+        var paramParts = params.split("&");
+        var index = 0;
+        for(index=0; index<paramParts.length; index++) {
+            var keyValue = paramParts[index].split('=');
+            if(keyValue.length >= 2) {
+                var key = keyValue[0];
+                var value = keyValue[1];
+                if(key === "v") {
+                    return "http://www.youtube.com/embed/" + value;
+                }
+            }
+        }
+    }
+    return url;
+}
+
 var doLinkAutolink = function(element) {
     var index = 0;
     for(index=0; index<element.splitHTML.length; index++) {
@@ -175,6 +196,7 @@ var doProcessPosts = function() {
             if(tsgConfig.checkLinkAutolink) { doLinkAutolink(element); }
             // recombine the split html
             element.innerHTML = element.splitHTML.join("");
+            
             // add an Ignore link on post headers
             var $ignoreLink = $('<a href="#">Ignore</a>').click(function() {
                 var author = findAuthor(element);
@@ -188,8 +210,30 @@ var doProcessPosts = function() {
                 doProcessPosts();
             });
             $(this).find(".postHeader .ph-right").append(' | ', $ignoreLink);
+            
+            // convert image links to embedded images
+            if(tsgConfig.checkEmbedImages) {
+                $("a[target='_blank'][href$='.bmp']").each(function()  { embedImageLink($(this))});
+                $("a[target='_blank'][href$='.gif']").each(function()  { embedImageLink($(this))});
+                $("a[target='_blank'][href$='.jpg']").each(function()  { embedImageLink($(this))});
+                $("a[target='_blank'][href$='.jpeg']").each(function() { embedImageLink($(this))});
+                $("a[target='_blank'][href$='.png']").each(function()  { embedImageLink($(this))});
+            }
+            
+            // convert YouTube links to embedded videos
+            if(tsgConfig.checkEmbedYouTube) {
+                $("a[target='_blank'][href*='youtube']").each(function() { embedYouTubeLink($(this))});
+            }
         }
     });
+}
+
+var embedImageLink = function(jqElement) {
+    jqElement.replaceWith('<img src="' + jqElement.attr("href") + '"/>');
+}
+
+var embedYouTubeLink = function(jqElement) {
+    jqElement.replaceWith('<iframe width="420" height="315" src="' + convertYouTubeUrl(jqElement.attr("href")) + '" frameborder="0" allowfullscreen="allowfullscreen"></iframe>');
 }
 
 var findAuthor = function(element) {
@@ -221,10 +265,15 @@ var isTag = function(text) {
 
 var loadConfiguration = function() {
     // load the configuration from storage
+    tsgConfig.checkEmbedImages = (GM_getValue("checkEmbedImages", "false") === "true");
+    tsgConfig.checkEmbedYouTube = (GM_getValue("checkEmbedYouTube", "false") === "true");
+    tsgConfig.checkLinkUnderline = (GM_getValue("checkLinkUnderline", "false") === "true");
     tsgConfig.checkLinkAutolink = (GM_getValue("checkLinkAutolink", "true") === "true");
     tsgConfig.checkLinkUnderline = (GM_getValue("checkLinkUnderline", "false") === "true");
     tsgConfig.cullIgnored = (GM_getValue("cullIgnored", "true") === "true");
     // update the dialog box
+    $("#checkEmbedImages")[0].checked = tsgConfig.checkEmbedImages;
+    $("#checkEmbedYouTube")[0].checked = tsgConfig.checkEmbedYouTube;
     $("#checkLinkAutolink")[0].checked = tsgConfig.checkLinkAutolink;
     $("#checkLinkUnderline")[0].checked = tsgConfig.checkLinkUnderline;
     $("#cullIgnored")[0].checked = tsgConfig.cullIgnored;
@@ -295,6 +344,8 @@ var reposition = function() {
 }
 
 var saveConfiguration = function() {
+    GM_setValue("checkEmbedImages", tsgConfig.checkEmbedImages);
+    GM_setValue("checkEmbedYouTube", tsgConfig.checkEmbedYouTube);
     GM_setValue("checkLinkAutolink", tsgConfig.checkLinkAutolink);
     GM_setValue("checkLinkUnderline", tsgConfig.checkLinkUnderline);
     GM_setValue("cullIgnored", tsgConfig.cullIgnored);
@@ -343,6 +394,8 @@ $(document).ready(function() {
             '<button id="ignore-list-remove">Remove</button>',
         '</div>',
         '<div id="tab-posts">',
+            '<input id="checkEmbedImages" type="checkbox"/> Embed Images<br/>',
+            '<input id="checkEmbedYouTube" type="checkbox"/> Embed YouTube Videos<br/>',
             '<input id="checkLinkAutolink" type="checkbox"/> Hyperlink URLs<br/>',
         '</div>',
         '<div id="tab-about">',
@@ -357,8 +410,6 @@ $(document).ready(function() {
     $("#truesight-goggles-img").width(
         ($("#truesight-goggles-img").width() / 2)
     );
-    // position the owl
-    reposition();
     // reposition the owl when necessary
     $(window).scroll(reposition);
     $(window).resize(reposition);
@@ -410,11 +461,25 @@ $(document).ready(function() {
         });
         saveConfiguration();
     });
+    // tell the embed images checkbox button how to act
+    $("#checkEmbedImages").click(function() {
+        tsgConfig.checkEmbedImages = $("#checkEmbedImages")[0].checked;
+        saveConfiguration();
+        doProcessPosts();
+    });
+    // tell the embed youtube checkbox button how to act
+    $("#checkEmbedYouTube").click(function() {
+        tsgConfig.checkEmbedYouTube = $("#checkEmbedYouTube")[0].checked;
+        saveConfiguration();
+        doProcessPosts();
+    });
     // save post text, if any
     savePostText();
     // apply the configuration
     loadConfiguration();
     applyConfiguration();
+    // position the owl
+    reposition();
 });
 
 //debugger;
