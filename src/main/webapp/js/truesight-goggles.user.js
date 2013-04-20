@@ -18,7 +18,7 @@
 //---------------------------------------------------------------------------
 // ==UserScript==
 // @name            truesight-goggles
-// @version         0.6
+// @version         0.7
 // @updateURL       https://github.com/blinkdog/truesight-goggles/raw/master/src/main/webapp/js/truesight-goggles.user.js
 // @namespace       http://pages.cs.wisc.edu/~meade/greasemonkey/
 // @description     Enhance your experience on Paizo's website
@@ -87,6 +87,31 @@ var buildIgnoreList = function() {
     return result.join("");
 }
 
+var chopHtml = function(innerHtml) {
+    var result = new Array();
+    var index = 0;
+    while(index < innerHtml.length) {
+        var nextLeft = innerHtml.indexOf("<", index);
+        if(nextLeft === -1) {
+            var last = innerHtml.substring(index);
+            result.push(last);
+            index = innerHtml.length;
+        } else {
+            var nextRight = innerHtml.indexOf(">", nextLeft+1);
+            if(nextRight === -1) {
+                throw "Unmatched < in innerHtml";
+            } else {
+                var before = innerHtml.substring(index, nextLeft);
+                var tag = innerHtml.substring(nextLeft, nextRight+1);
+                if(before.length > 0) { result.push(before); }
+                result.push(tag);
+                index = nextRight+1;
+            }
+        }
+    }
+    return result;
+}
+
 var collateAnchorTags = function(splitHtml) {
     var result = new Array();
     var index = 0;
@@ -143,23 +168,40 @@ var doProcessPosts = function() {
             // reload the original text of the post
             element.innerHTML = element.savedInnerHTML;
             // split the HTML into tags and text
-            element.splitHTML = splitHtml(element.innerHTML);
+            element.splitHTML = chopHtml(element.innerHTML);
             // collate anchor tags into a single array element
             element.splitHTML = collateAnchorTags(element.splitHTML);
             // automatically linkify naked URLs
             if(tsgConfig.checkLinkAutolink) { doLinkAutolink(element); }
-//            // visually mark something
-//            $(this).after("<hr/>");
             // recombine the split html
             element.innerHTML = element.splitHTML.join("");
+            // add an Ignore link on post headers
+            var $ignoreLink = $('<a href="#">Ignore</a>').click(function() {
+                var author = findAuthor(element);
+                $("#ignore-list").append([
+                    "<li class='ui-widget-content'>",
+                    author,
+                    "</li>",
+                ].join(""));
+                tsgConfig.ignoreList.push(author);
+                saveConfiguration();
+                doProcessPosts();
+            });
+            $(this).find(".postHeader .ph-right").append(' | ', $ignoreLink);
         }
     });
 }
 
 var findAuthor = function(element) {
     var title = $(".nameHeader a", element).attr("title");
+    if(title.indexOf(" aka ") != -1) {
+        title = title.substring(0, title.indexOf(" aka "));
+    }
     if(title.indexOf("Alias of") != -1) {
-        title = title.substring(8);
+        title = title.substring(9);
+    }
+    if(title.indexOf("Pathfinder Society character of") != -1) {
+        title = title.substring(32);
     }
     return title;
 }
@@ -265,31 +307,6 @@ var savePostText = function() {
     });
 }
 
-var splitHtml = function(innerHtml) {
-    var result = new Array();
-    var index = 0;
-    while(index < innerHtml.length) {
-        var nextLeft = innerHtml.indexOf("<", index);
-        if(nextLeft === -1) {
-            var last = innerHtml.substring(index);
-            result.push(last);
-            index = innerHtml.length;
-        } else {
-            var nextRight = innerHtml.indexOf(">", nextLeft+1);
-            if(nextRight === -1) {
-                throw "Unmatched < in innerHtml";
-            } else {
-                var before = innerHtml.substring(index, nextLeft);
-                var tag = innerHtml.substring(nextLeft, nextRight+1);
-                if(before.length > 0) { result.push(before); }
-                result.push(tag);
-                index = nextRight+1;
-            }
-        }
-    }
-    return result;
-}
-
 //---------------------------------------------------------------------------
 // Lights, Camera, Action!
 //---------------------------------------------------------------------------
@@ -301,6 +318,8 @@ $(document).ready(function() {
         "#truesight-goggles { opacity:0.5; }",
         "#truesight-goggles:hover { opacity:1.0; }",
         "#truesight-goggles-dialog { display:none; }",
+	"#ignore-list .ui-selecting { background: #FECA40; }",
+	"#ignore-list .ui-selected { background: #F39814; color: white; }"
     ].join(""));
     // create the owl
     $('body').append([
@@ -321,7 +340,7 @@ $(document).ready(function() {
         '<div id="tab-ignore">',
             '<input id="cullIgnored" type="checkbox"/> Remove Posts by Ignored<br/>',
             buildIgnoreList(),
-            '<button>Remove</button>',
+            '<button id="ignore-list-remove">Remove</button>',
         '</div>',
         '<div id="tab-posts">',
             '<input id="checkLinkAutolink" type="checkbox"/> Hyperlink URLs<br/>',
@@ -345,6 +364,7 @@ $(document).ready(function() {
     $(window).resize(reposition);
     // tell the owl to pop up a friendly dialog when clicked
     $("#truesight-goggles-img").click(function() {
+        $("#ignore-list").selectable();
         $("#truesight-goggles-tabs").tabs();
         $("#truesight-goggles-dialog").dialog({
             minHeight: 300, minWidth: 360,
@@ -372,6 +392,23 @@ $(document).ready(function() {
         } else {
             location.reload(true);
         }
+    });
+    // tell the Remove (from ignore list) button how to act
+    $("#ignore-list-remove").click(function() {
+        $("#ignore-list .ui-selected").each(function(index, element) {
+            var removed = false;
+            tsgConfig.ignoreList = tsgConfig.ignoreList.filter(function(val) {
+                if(val === element.textContent) {
+                    removed = true;
+                    return false;
+                }
+                return true;
+            });
+            if(removed) { 
+                $(this).remove();
+            }
+        });
+        saveConfiguration();
     });
     // save post text, if any
     savePostText();
