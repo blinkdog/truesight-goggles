@@ -18,7 +18,7 @@
 //---------------------------------------------------------------------------
 // ==UserScript==
 // @name            truesight-goggles
-// @version         0.8
+// @version         0.9
 // @updateURL       https://github.com/blinkdog/truesight-goggles/raw/master/src/main/webapp/js/truesight-goggles.user.js
 // @namespace       http://pages.cs.wisc.edu/~meade/greasemonkey/
 // @description     Enhance your experience on Paizo's website
@@ -59,6 +59,7 @@ var linkUnderlineStyles = [
 
 //---------------------------------------------------------------------------
 
+var smurfMap = {};
 var tsgConfig = {};
 
 //---------------------------------------------------------------------------
@@ -66,6 +67,7 @@ var tsgConfig = {};
 var applyConfiguration = function() {
     doLinkUnderline(tsgConfig.checkLinkUnderline);
     doProcessPosts();
+    if(tsgConfig.checkReplaceSmurf) { smurfIt(); }
 }
 
 var buildIgnoreList = function() {
@@ -250,6 +252,17 @@ var findAuthor = function(element) {
     return title;
 }
 
+var findAuthorImgUrl = function(responseText, smurfUrl) {
+    var startsAt = responseText.indexOf("/image/avatar");
+    if(startsAt === -1) { return null; }
+    var endsAt = responseText.indexOf('"', startsAt);
+    if(endsAt === -1) {
+        endsAt = responseText.indexOf("'", startsAt);
+        if(endsAt === -1) { return null; }
+    }
+    return responseText.substring(startsAt, endsAt);
+}
+
 var isAnchor = function(text) {
     return (text[1] === 'a' || text[1] === 'A');
 }
@@ -263,6 +276,36 @@ var isTag = function(text) {
     return (text[0] === '<');
 }
 
+var loadAuthorImgUrl = function(postAuthorUrl) {
+    GM_xmlhttpRequest({
+        method: "GET",
+        url: postAuthorUrl,
+        onload: function(response) {
+            // extract the author's real avatar image
+            var realAvatar = findAuthorImgUrl(response.responseText);
+            // if we got a real response back
+            if(realAvatar != null) {
+                // add it to the cache
+                smurfMap[postAuthorUrl].imgUrl = realAvatar;
+                // indicate that it has been loaded
+                smurfMap[postAuthorUrl].loaded = true;
+                // replace smurf avatars with real avatars
+                $(".avatar-link").each(function(index, element) {
+                    var lowerInnerHtml = element.innerHTML.toLowerCase();
+                    if(lowerInnerHtml.indexOf("smurf") != -1) {
+                        var replaceAuthorUrl = element.getAttribute("href");
+                        if(replaceAuthorUrl === postAuthorUrl) {
+                            $(this).find("img").each(function(imgIndex, imgElement) {
+                                imgElement.setAttribute("src", smurfMap[postAuthorUrl].imgUrl);
+                            });
+                        }
+                    }
+                });
+            }
+        }
+    });
+}
+
 var loadConfiguration = function() {
     // load the configuration from storage
     tsgConfig.checkEmbedImages = (GM_getValue("checkEmbedImages", "false") === "true");
@@ -270,12 +313,14 @@ var loadConfiguration = function() {
     tsgConfig.checkLinkUnderline = (GM_getValue("checkLinkUnderline", "false") === "true");
     tsgConfig.checkLinkAutolink = (GM_getValue("checkLinkAutolink", "true") === "true");
     tsgConfig.checkLinkUnderline = (GM_getValue("checkLinkUnderline", "false") === "true");
+    tsgConfig.checkReplaceSmurf = (GM_getValue("checkReplaceSmurf", "false") === "true");
     tsgConfig.cullIgnored = (GM_getValue("cullIgnored", "true") === "true");
     // update the dialog box
     $("#checkEmbedImages")[0].checked = tsgConfig.checkEmbedImages;
     $("#checkEmbedYouTube")[0].checked = tsgConfig.checkEmbedYouTube;
     $("#checkLinkAutolink")[0].checked = tsgConfig.checkLinkAutolink;
     $("#checkLinkUnderline")[0].checked = tsgConfig.checkLinkUnderline;
+    $("#checkReplaceSmurf")[0].checked = tsgConfig.checkReplaceSmurf;
     $("#cullIgnored")[0].checked = tsgConfig.cullIgnored;
 }
 
@@ -348,6 +393,7 @@ var saveConfiguration = function() {
     GM_setValue("checkEmbedYouTube", tsgConfig.checkEmbedYouTube);
     GM_setValue("checkLinkAutolink", tsgConfig.checkLinkAutolink);
     GM_setValue("checkLinkUnderline", tsgConfig.checkLinkUnderline);
+    GM_setValue("checkReplaceSmurf", tsgConfig.checkReplaceSmurf);
     GM_setValue("cullIgnored", tsgConfig.cullIgnored);
     GM_setValue("ignoreList", JSON.stringify(tsgConfig.ignoreList));
 }
@@ -355,6 +401,26 @@ var saveConfiguration = function() {
 var savePostText = function() {
     $(".post itemscope").each(function(index, element) {
         element.savedInnerHTML = element.innerHTML;
+    });
+}
+
+var smurfIt = function() {
+    $(".avatar-link").each(function(index, element) {
+        var lowerInnerHtml = element.innerHTML.toLowerCase();
+        if(lowerInnerHtml.indexOf("smurf") != -1) {
+            var postAuthorUrl = element.getAttribute("href");
+            if(smurfMap[postAuthorUrl] == null) {
+                smurfMap[postAuthorUrl] = {
+                    imgUrl: "",
+                    loaded: false,
+                    loading: false
+                };
+            }
+            if(smurfMap[postAuthorUrl].loading === false) {
+                smurfMap[postAuthorUrl].loading = true;
+                loadAuthorImgUrl(postAuthorUrl);
+            }
+        }
     });
 }
 
@@ -397,6 +463,7 @@ $(document).ready(function() {
             '<input id="checkEmbedImages" type="checkbox"/> Embed Images<br/>',
             '<input id="checkEmbedYouTube" type="checkbox"/> Embed YouTube Videos<br/>',
             '<input id="checkLinkAutolink" type="checkbox"/> Hyperlink URLs<br/>',
+            '<input id="checkReplaceSmurf" type="checkbox"/> Replace Smurf Avatars<br/>',
         '</div>',
         '<div id="tab-about">',
             '<p><a href="https://paizo.com/people/anotherMage">another_mage</a>\'s Truesight Goggles<br/>License: <a href="http://www.gnu.org/licenses/agpl.html">AGPL v3+</a>&nbsp;Source: <a href="https://github.com/blinkdog/truesight-goggles">GitHub</a></p>',
@@ -472,6 +539,14 @@ $(document).ready(function() {
         tsgConfig.checkEmbedYouTube = $("#checkEmbedYouTube")[0].checked;
         saveConfiguration();
         doProcessPosts();
+    });
+    // tell the Replace Smurf Avatars checkbox how to act
+    $("#checkReplaceSmurf").click(function() {
+        tsgConfig.checkReplaceSmurf = $("#checkReplaceSmurf")[0].checked;
+        saveConfiguration();
+        if(tsgConfig.checkReplaceSmurf) {
+            smurfIt();
+        }
     });
     // save post text, if any
     savePostText();
