@@ -18,7 +18,7 @@
 //---------------------------------------------------------------------------
 // ==UserScript==
 // @name            truesight-goggles
-// @version         1.0
+// @version         1.1
 // @updateURL       https://github.com/blinkdog/truesight-goggles/raw/master/src/main/webapp/js/truesight-goggles.user.js
 // @namespace       http://pages.cs.wisc.edu/~meade/greasemonkey/
 // @description     Enhance your experience on Paizo's website
@@ -76,10 +76,17 @@ var applyKeyword = function(splitHtml, keyword) {
     while(index < splitHtml.length) {
         // if the text is not a tag
         if(isTag(splitHtml[index]) === false) {
-            var keywordAt = splitHtml[index].search(" " + keyword + " ", "i");
+            var keywordAt = splitHtml[index].search(new RegExp("^" + keyword + "($|\\W)", "i"));
+            // if we couldn't find the keyword at the beginning of the line'
+            if(keywordAt < 0) {
+                keywordAt = splitHtml[index].search(new RegExp("\\W" + keyword + "($|\\W)", "i"));
+                if(keywordAt >= 0) {
+                    // skip over the pre-character
+                    keywordAt++;
+                }
+            }
             // if we find the keyword
             if(keywordAt >= 0) {
-                keywordAt++; // makes up for the pre-word space
                 var keywordTo = keywordAt+keyword.length;
                 result.push(splitHtml[index].substring(0, keywordAt));
                 result.push([
