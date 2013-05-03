@@ -18,7 +18,7 @@
 //---------------------------------------------------------------------------
 // ==UserScript==
 // @name            truesight-goggles
-// @version         1.1
+// @version         1.2
 // @updateURL       https://github.com/blinkdog/truesight-goggles/raw/master/src/main/webapp/js/truesight-goggles.user.js
 // @namespace       http://pages.cs.wisc.edu/~meade/greasemonkey/
 // @description     Enhance your experience on Paizo's website
@@ -70,48 +70,53 @@ var applyConfiguration = function() {
     if(tsgConfig.checkReplaceSmurf) { smurfIt(); }
 }
 
-var applyKeyword = function(splitHtml, keyword) {
-    var result = new Array();
-    var index = 0;
-    while(index < splitHtml.length) {
-        // if the text is not a tag
-        if(isTag(splitHtml[index]) === false) {
-            var keywordAt = splitHtml[index].search(new RegExp("^" + keyword + "($|\\W)", "i"));
-            // if we couldn't find the keyword at the beginning of the line'
-            if(keywordAt < 0) {
-                keywordAt = splitHtml[index].search(new RegExp("\\W" + keyword + "($|\\W)", "i"));
-                if(keywordAt >= 0) {
-                    // skip over the pre-character
-                    keywordAt++;
-                }
-            }
-            // if we find the keyword
-            if(keywordAt >= 0) {
-                var keywordTo = keywordAt+keyword.length;
-                result.push(splitHtml[index].substring(0, keywordAt));
-                result.push([
-                    '<a class="autoLink" target="_blank" href="',
-                    keywordTopicMap[keyword],
-                    '">',
-                    splitHtml[index].substring(keywordAt, keywordTo),
-                    '</a>'                    
-                ].join(""));
-                result.push(splitHtml[index].substring(keywordTo));
-            }
-            // otherwise, we didn't find the keyword
-            else {
-                // so just pass it along without modification
-                result.push(splitHtml[index]);
-            }
-        }
-        // otherwise it is a tag
-        else {
-            // so just pass it along without modification
-            result.push(splitHtml[index]);
-        }
-        index++;
+var applyKeywords = function(keywordResult, splitHtml, localKeywords, level) {
+    // if the provided line is a tag, don't mess with it
+    if(isTag(splitHtml)) {
+        keywordResult.push(splitHtml);
+        return;
     }
-    return result;
+    // for each of our keywords, see if the provided line contains them
+    var foundKeyword = false;
+    var keywordsIndex = 0;
+    for(keywordsIndex=0; keywordsIndex<localKeywords.length; keywordsIndex++) {
+        var keyword = localKeywords[keywordsIndex];
+        // search for the keyword at the beginning of the line
+        var keywordAt = splitHtml.search(new RegExp("^" + keyword + "($|\\W)", "i"));
+        // if we couldn't find the keyword at the beginning of the line'
+        if(keywordAt < 0) {
+            // try searching inside the post
+            keywordAt = splitHtml.search(new RegExp("\\W" + keyword + "($|\\W)", "i"));
+            // if we do find it inside the post
+            if(keywordAt >= 0) {
+                // skip over the non-letter before the keyword
+                keywordAt++;
+            }
+        }
+        // if we managed to find the keyword at all
+        if(keywordAt >= 0) {
+            foundKeyword = true;
+            var keywordTo = keywordAt+keyword.length;
+            // recursively check the part before 
+            applyKeywords(keywordResult, splitHtml.substring(0, keywordAt), localKeywords, level+1);
+            // put the keyword in the results
+            keywordResult.push([
+                '<a class="autoLink" target="_blank" href="',
+                keywordTopicMap[keyword],
+                '">',
+                splitHtml.substring(keywordAt, keywordTo),
+                '</a>'                    
+            ].join(""));
+            // recursively check the part after
+            applyKeywords(keywordResult, splitHtml.substring(keywordTo), localKeywords, level+1);
+            // and stop looking for keywords
+            break;
+        }
+    }
+    // after all the keywords, if we didn't find any
+    if(foundKeyword === false) {
+        keywordResult.push(splitHtml);
+    }
 }
 
 var buildIgnoreList = function() {
@@ -218,18 +223,7 @@ var doLinkKeyword = function(element) {
     
     var splitIndex = 0;
     for(splitIndex=0; splitIndex<splitHtml.length; splitIndex++) {
-        var applyResult = new Array();
-        applyResult.push(splitHtml[splitIndex]);
-        
-        var keywordIndex = 0;
-        for(keywordIndex=0; keywordIndex<localKeywords.length; keywordIndex++) {
-            applyResult = applyKeyword(applyResult, localKeywords[keywordIndex]);
-        }
-        
-        var applyIndex = 0;
-        for(applyIndex=0; applyIndex<applyResult.length; applyIndex++) {
-            keywordResult.push(applyResult[applyIndex]);
-        }
+        applyKeywords(keywordResult, splitHtml[splitIndex], localKeywords, 0);
     }
     
     element.splitHTML = keywordResult;
