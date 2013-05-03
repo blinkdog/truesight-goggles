@@ -14,7 +14,7 @@ Once you have installed Greasemonkey, simply navigate your browser to
 a copy of truesight-goggles.user.js and follow the prompts provided
 by Greasemonkey.
 
-    [https://github.com/blinkdog/truesight-goggles/raw/master/src/main/webapp/js/truesight-goggles.user.js](https://github.com/blinkdog/truesight-goggles/raw/master/src/main/webapp/js/truesight-goggles.user.js)
+[https://github.com/blinkdog/truesight-goggles/raw/master/src/main/webapp/js/truesight-goggles.user.js](https://github.com/blinkdog/truesight-goggles/raw/master/src/main/webapp/js/truesight-goggles.user.js)
 
 # Copyright
 Copyright 2013 Patrick Meade.
